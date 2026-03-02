@@ -1,43 +1,26 @@
-/**
- * webrtc-manager.ts
- *
- * Manages the WebRTC peer connection lifecycle. Uses an XmtpSignaling
- * instance to exchange SDP offers/answers and ICE candidates over
- * XMTP's E2EE messaging network.
- *
- * Encryption layers:
- *   1. XMTP MLS (Messaging Layer Security) — encrypts all signaling messages
- *   2. DTLS-SRTP — encrypts the actual media (audio/video) in transit
- *   3. (Optional) Insertable Streams — adds application-level E2EE on media frames
- */
-
 import type { XmtpSignaling, SignalingMessage } from "./xmtp-signaling";
+import type { LogLevel } from "./types";
 
-export type ConnectionState =
-  | "idle"
-  | "connecting"
-  | "connected"
-  | "disconnected"
-  | "failed";
+export type ConnectionState = "idle" | "connecting" | "connected" | "disconnected" | "failed";
 
-export interface WebRTCCallbacks {
-  onRemoteStream: (stream: MediaStream) => void;
-  onConnectionStateChange: (state: ConnectionState) => void;
-  onLog: (message: string, type?: "ok" | "warn" | "err") => void;
-}
+export type WebRTCCallbacks = {
+  readonly onRemoteStream: (stream: MediaStream) => void;
+  readonly onConnectionStateChange: (state: ConnectionState) => void;
+  readonly onLog: (message: string, type?: LogLevel) => void;
+};
 
-const ICE_SERVERS: RTCConfiguration = {
+const ICE_SERVERS = {
   iceServers: [
     { urls: "stun:stun.l.google.com:19302" },
     { urls: "stun:stun1.l.google.com:19302" },
   ],
-};
+} as const satisfies RTCConfiguration;
 
 export class WebRTCManager {
   private pc: RTCPeerConnection | null = null;
-  private signaling: XmtpSignaling;
-  private peerAddress: string = "";
-  private callbacks: WebRTCCallbacks;
+  private readonly signaling: XmtpSignaling;
+  private peerAddress = "";
+  private readonly callbacks: WebRTCCallbacks;
   private localStream: MediaStream | null = null;
   private pendingCandidates: RTCIceCandidateInit[] = [];
 
@@ -46,81 +29,105 @@ export class WebRTCManager {
     this.callbacks = callbacks;
   }
 
-  /** Set the local media stream to be sent to the peer */
-  setLocalStream(stream: MediaStream): void {
+  setLocalStream(stream: MediaStream) {
     this.localStream = stream;
   }
 
-  /** Set the target peer's Ethereum address or XMTP inbox ID */
-  setPeerAddress(address: string): void {
+  setPeerAddress(address: string) {
     this.peerAddress = address;
   }
 
-  /** Send a signaling message to the peer, auto-detecting address vs inbox ID */
-  private sendSignal(message: SignalingMessage): Promise<void> {
+  private sendSignal(message: SignalingMessage) {
     if (this.peerAddress.startsWith("0x")) {
       return this.signaling.sendSignalByAddress(this.peerAddress, message);
     }
     return this.signaling.sendSignal(this.peerAddress, message);
   }
 
-  /** Create the RTCPeerConnection and wire up event handlers */
-  private createPeerConnection(): RTCPeerConnection {
+  private createPeerConnection() {
     const pc = new RTCPeerConnection(ICE_SERVERS);
 
-    // Send ICE candidates to peer via XMTP
     pc.onicecandidate = (event) => {
-      if (event.candidate) {
-        this.callbacks.onLog("Sending ICE candidate via XMTP");
-        this.sendSignal({
-          type: "ice-candidate",
-          candidate: JSON.stringify(event.candidate.toJSON()),
-          sdpMid: event.candidate.sdpMid,
-          sdpMLineIndex: event.candidate.sdpMLineIndex,
-        }).catch((err) =>
-          this.callbacks.onLog(`ICE send failed: ${err.message}`, "err")
-        );
-      }
+      if (!event.candidate) return;
+      this.callbacks.onLog("Sending ICE candidate via XMTP");
+      this.sendSignal({
+        type: "ice-candidate",
+        candidate: JSON.stringify(event.candidate.toJSON()),
+        sdpMid: event.candidate.sdpMid,
+        sdpMLineIndex: event.candidate.sdpMLineIndex,
+      }).catch((err: unknown) => {
+        const message = err instanceof Error ? err.message : String(err);
+        this.callbacks.onLog(`ICE send failed: ${message}`, "err");
+      });
     };
 
     pc.oniceconnectionstatechange = () => {
-      const state = pc.iceConnectionState;
-      this.callbacks.onLog(`ICE: ${state}`, state === "connected" || state === "completed" ? "ok" : state === "failed" ? "err" : "warn");
-      this.mapConnectionState(state);
+      const { iceConnectionState } = pc;
+      const level = this.iceStateToLogLevel(iceConnectionState);
+      this.callbacks.onLog(`ICE: ${iceConnectionState}`, level);
+      this.mapConnectionState(iceConnectionState);
     };
 
     pc.onconnectionstatechange = () => {
-      const state = pc.connectionState;
-      this.callbacks.onLog(`Connection: ${state}`, state === "connected" ? "ok" : state === "failed" ? "err" : undefined);
-      if (state === "connected") {
-        this.callbacks.onConnectionStateChange("connected");
-      } else if (state === "failed") {
-        this.callbacks.onConnectionStateChange("failed");
-      } else if (state === "disconnected") {
-        this.callbacks.onConnectionStateChange("disconnected");
+      const { connectionState } = pc;
+      const level = this.connectionStateToLogLevel(connectionState);
+      this.callbacks.onLog(`Connection: ${connectionState}`, level);
+
+      switch (connectionState) {
+        case "connected":
+          this.callbacks.onConnectionStateChange("connected");
+          break;
+        case "failed":
+          this.callbacks.onConnectionStateChange("failed");
+          break;
+        case "disconnected":
+          this.callbacks.onConnectionStateChange("disconnected");
+          break;
       }
     };
 
-    // Receive remote media tracks
     pc.ontrack = (event) => {
       this.callbacks.onLog("Remote media track received", "ok");
-      if (event.streams[0]) {
-        this.callbacks.onRemoteStream(event.streams[0]);
+      const [stream] = event.streams;
+      if (stream) {
+        this.callbacks.onRemoteStream(stream);
       }
     };
 
-    // Add local tracks
     if (this.localStream) {
-      this.localStream.getTracks().forEach((track) => {
-        pc.addTrack(track, this.localStream!);
-      });
+      for (const track of this.localStream.getTracks()) {
+        pc.addTrack(track, this.localStream);
+      }
     }
 
     this.pc = pc;
     return pc;
   }
 
-  private mapConnectionState(iceState: string): void {
+  private iceStateToLogLevel(state: RTCIceConnectionState): LogLevel {
+    switch (state) {
+      case "connected":
+      case "completed":
+        return "ok";
+      case "failed":
+        return "err";
+      default:
+        return "warn";
+    }
+  }
+
+  private connectionStateToLogLevel(state: RTCPeerConnectionState): LogLevel | undefined {
+    switch (state) {
+      case "connected":
+        return "ok";
+      case "failed":
+        return "err";
+      default:
+        return undefined;
+    }
+  }
+
+  private mapConnectionState(iceState: RTCIceConnectionState) {
     switch (iceState) {
       case "connected":
       case "completed":
@@ -138,10 +145,7 @@ export class WebRTCManager {
     }
   }
 
-  /**
-   * CALLER: Create an SDP offer and send it to the peer via XMTP.
-   */
-  async call(): Promise<void> {
+  async call() {
     if (!this.peerAddress) throw new Error("Set peer address first");
     if (!this.localStream) throw new Error("Set local stream first");
 
@@ -153,18 +157,11 @@ export class WebRTCManager {
     await pc.setLocalDescription(offer);
 
     this.callbacks.onLog(`Sending offer via XMTP to ${this.peerAddress.slice(0, 8)}...`);
-    await this.sendSignal({
-      type: "offer",
-      sdp: offer.sdp!,
-    });
+    await this.sendSignal({ type: "offer", sdp: offer.sdp! });
     this.callbacks.onLog("Offer sent via E2EE XMTP channel", "ok");
   }
 
-  /**
-   * Handle an incoming signaling message from XMTP.
-   * This is called by the app when the XMTP stream receives a message.
-   */
-  async handleSignalingMessage(msg: SignalingMessage): Promise<void> {
+  async handleSignalingMessage(msg: SignalingMessage) {
     switch (msg.type) {
       case "offer":
         await this.handleOffer(msg.sdp);
@@ -181,17 +178,13 @@ export class WebRTCManager {
     }
   }
 
-  /**
-   * CALLEE: Receive an offer, create an answer, and send it back via XMTP.
-   */
-  private async handleOffer(sdp: string): Promise<void> {
+  private async handleOffer(sdp: string) {
     this.callbacks.onLog("Received offer via XMTP", "ok");
     this.callbacks.onConnectionStateChange("connecting");
 
     const pc = this.createPeerConnection();
     await pc.setRemoteDescription(new RTCSessionDescription({ type: "offer", sdp }));
 
-    // Apply any ICE candidates that arrived before the offer
     for (const candidate of this.pendingCandidates) {
       await pc.addIceCandidate(new RTCIceCandidate(candidate));
     }
@@ -201,50 +194,35 @@ export class WebRTCManager {
     await pc.setLocalDescription(answer);
 
     this.callbacks.onLog("Sending answer via XMTP...");
-    await this.sendSignal({
-      type: "answer",
-      sdp: answer.sdp!,
-    });
+    await this.sendSignal({ type: "answer", sdp: answer.sdp! });
     this.callbacks.onLog("Answer sent via E2EE XMTP channel", "ok");
   }
 
-  /** CALLER: Receive the answer from the callee */
-  private async handleAnswer(sdp: string): Promise<void> {
+  private async handleAnswer(sdp: string) {
     if (!this.pc) return;
     this.callbacks.onLog("Received answer via XMTP", "ok");
-    await this.pc.setRemoteDescription(
-      new RTCSessionDescription({ type: "answer", sdp })
-    );
+    await this.pc.setRemoteDescription(new RTCSessionDescription({ type: "answer", sdp }));
 
-    // Apply any pending ICE candidates
     for (const candidate of this.pendingCandidates) {
       await this.pc.addIceCandidate(new RTCIceCandidate(candidate));
     }
     this.pendingCandidates = [];
   }
 
-  /** Add an ICE candidate from the remote peer */
-  private async handleIceCandidate(msg: {
-    candidate: string;
-    sdpMid: string | null;
-    sdpMLineIndex: number | null;
-  }): Promise<void> {
+  private async handleIceCandidate(msg: Extract<SignalingMessage, { type: "ice-candidate" }>) {
     const candidateInit: RTCIceCandidateInit = JSON.parse(msg.candidate);
 
-    if (this.pc && this.pc.remoteDescription) {
+    if (this.pc?.remoteDescription) {
       await this.pc.addIceCandidate(new RTCIceCandidate(candidateInit));
     } else {
-      // Queue candidates that arrive before the remote description is set
       this.pendingCandidates.push(candidateInit);
     }
   }
 
-  /** Hang up and clean up */
-  hangUp(): void {
+  hangUp() {
     if (this.pc) {
-      // Notify the peer
       if (this.peerAddress) {
-        this.sendSignal({ type: "hangup" }).catch(() => {});
+        void this.sendSignal({ type: "hangup" }).catch(() => {});
       }
       this.pc.close();
       this.pc = null;
@@ -254,8 +232,7 @@ export class WebRTCManager {
     this.callbacks.onLog("Call ended", "warn");
   }
 
-  /** Check if we have an active peer connection */
-  isActive(): boolean {
+  isActive() {
     return this.pc !== null && this.pc.connectionState !== "closed";
   }
 }

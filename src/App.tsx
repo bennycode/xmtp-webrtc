@@ -2,33 +2,26 @@ import { useState, useRef, useCallback, useEffect } from "react";
 import { Wallet } from "ethers";
 import { XmtpSignaling, createXmtpSigner } from "./xmtp-signaling";
 import { WebRTCManager, type ConnectionState } from "./webrtc-manager";
+import type { LogLevel } from "./types";
 
-// ── Types ────────────────────────────────────────────────────────────
-
-interface LogEntry {
-  time: string;
-  message: string;
-  type?: "ok" | "warn" | "err";
-}
-
-// ── App ──────────────────────────────────────────────────────────────
+type LogEntry = {
+  readonly time: string;
+  readonly message: string;
+  readonly type?: LogLevel;
+};
 
 export default function App() {
-  // Wallet & XMTP
-  const [walletAddress, setWalletAddress] = useState<string>("");
+  const [walletAddress, setWalletAddress] = useState("");
   const [xmtpConnected, setXmtpConnected] = useState(false);
-  const [inboxId, setInboxId] = useState<string>("");
+  const [inboxId, setInboxId] = useState("");
 
-  // Call
   const [peerAddress, setPeerAddress] = useState("");
   const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
   const [cameraActive, setCameraActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
-  // Logs
-  const [logs, setLogs] = useState<LogEntry[]>([]);
+  const [logs, setLogs] = useState<readonly LogEntry[]>([]);
 
-  // Refs
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
   const signalingRef = useRef<XmtpSignaling | null>(null);
@@ -36,9 +29,7 @@ export default function App() {
   const localStreamRef = useRef<MediaStream | null>(null);
   const logBoxRef = useRef<HTMLDivElement>(null);
 
-  // ── Logging ──────────────────────────────────────────────────────
-
-  const log = useCallback((message: string, type?: "ok" | "warn" | "err") => {
+  const log = useCallback((message: string, type?: LogLevel) => {
     const time = new Date().toLocaleTimeString("en", {
       hour12: false,
       hour: "2-digit",
@@ -48,25 +39,18 @@ export default function App() {
     setLogs((prev) => [...prev.slice(-100), { time, message, type }]);
   }, []);
 
-  // Auto-scroll logs
   useEffect(() => {
     logBoxRef.current?.scrollTo(0, logBoxRef.current.scrollHeight);
   }, [logs]);
-
-  // ── 1. Connect Wallet ──────────────────────────────────────────
 
   const connectWithSigner = useCallback(async (address: string, signMessage: (msg: string) => Promise<string>) => {
     try {
       setWalletAddress(address);
       log(`Wallet connected: ${address.slice(0, 8)}…${address.slice(-6)}`, "ok");
 
-      // Create XMTP signer and connect
       log("Connecting to XMTP network (dev)...");
       const signaling = new XmtpSignaling();
-      const xmtpSigner = createXmtpSigner({
-        address,
-        signMessage,
-      });
+      const xmtpSigner = createXmtpSigner({ address, signMessage });
 
       const id = await signaling.connect(xmtpSigner, "dev");
       signalingRef.current = signaling;
@@ -74,37 +58,31 @@ export default function App() {
       setXmtpConnected(true);
       log(`XMTP connected — inbox: ${id.slice(0, 12)}…`, "ok");
 
-      // Start listening for incoming signaling messages
       await signaling.startListening((msg, senderInboxId) => {
         log(`Received ${msg.type} via XMTP from ${senderInboxId.slice(0, 12)}…`, "ok");
-        // Auto-set peer address for incoming calls so replies go back to the caller
         if (rtcRef.current && !rtcRef.current.isActive()) {
           rtcRef.current.setPeerAddress(senderInboxId);
         }
         rtcRef.current?.handleSignalingMessage(msg);
       });
       log("Listening for incoming calls via XMTP...", "ok");
-    } catch (err: any) {
-      log(`Connection failed: ${err.message}`, "err");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Connection failed: ${message}`, "err");
     }
   }, [log]);
 
   const connectEphemeral = useCallback(async () => {
     log("Generating ephemeral EOA wallet...");
     const wallet = Wallet.createRandom();
-    const address = wallet.address;
+    const { address } = wallet;
     log(`Ephemeral wallet: ${address.slice(0, 8)}…${address.slice(-6)}`, "ok");
-    await connectWithSigner(address, (msg: string) => wallet.signMessage(msg));
+    await connectWithSigner(address, (msg) => wallet.signMessage(msg));
   }, [connectWithSigner, log]);
-
-  // ── 2. Start Camera ─────────────────────────────────────────────
 
   const startCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({
-        video: true,
-        audio: true,
-      });
+      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -112,7 +90,6 @@ export default function App() {
       setCameraActive(true);
       log("Camera & microphone active", "ok");
 
-      // Set up WebRTC manager
       const rtc = new WebRTCManager(signalingRef.current!, {
         onRemoteStream: (remoteStream) => {
           if (remoteVideoRef.current) {
@@ -120,30 +97,28 @@ export default function App() {
             remoteVideoRef.current.play().catch(() => {});
           }
         },
-        onConnectionStateChange: (state) => setConnectionState(state),
+        onConnectionStateChange: setConnectionState,
         onLog: log,
       });
       rtc.setLocalStream(stream);
       rtcRef.current = rtc;
-    } catch (err: any) {
-      log(`Camera failed: ${err.message}`, "err");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Camera failed: ${message}`, "err");
     }
   }, [log]);
-
-  // ── 3. Call Peer ─────────────────────────────────────────────────
 
   const callPeer = useCallback(async () => {
     if (!peerAddress || !rtcRef.current) return;
     rtcRef.current.setPeerAddress(peerAddress);
     try {
       await rtcRef.current.call();
-    } catch (err: any) {
-      log(`Call failed: ${err.message}`, "err");
+    } catch (error: unknown) {
+      const message = error instanceof Error ? error.message : String(error);
+      log(`Call failed: ${message}`, "err");
       setConnectionState("failed");
     }
   }, [peerAddress, log]);
-
-  // ── 4. Hang Up ──────────────────────────────────────────────────
 
   const hangUp = useCallback(() => {
     rtcRef.current?.hangUp();
@@ -151,17 +126,15 @@ export default function App() {
     setConnectionState("idle");
   }, []);
 
-  // ── 5. Toggle Mute ──────────────────────────────────────────────
-
   const toggleMute = useCallback(() => {
     if (!localStreamRef.current) return;
-    const enabled = !isMuted;
-    localStreamRef.current.getAudioTracks().forEach((t) => (t.enabled = !enabled));
-    setIsMuted(enabled);
-    log(enabled ? "Microphone muted" : "Microphone unmuted");
+    const shouldMute = !isMuted;
+    for (const track of localStreamRef.current.getAudioTracks()) {
+      track.enabled = !shouldMute;
+    }
+    setIsMuted(shouldMute);
+    log(shouldMute ? "Microphone muted" : "Microphone unmuted");
   }, [isMuted, log]);
-
-  // ── Update peer address on the RTC manager ──────────────────────
 
   useEffect(() => {
     if (rtcRef.current && peerAddress) {
@@ -169,18 +142,9 @@ export default function App() {
     }
   }, [peerAddress]);
 
-  // ── Render ──────────────────────────────────────────────────────
-
-  const stateColor = (state: ConnectionState) => {
-    if (state === "connected") return "var(--green)";
-    if (state === "connecting") return "var(--yellow)";
-    if (state === "failed" || state === "disconnected") return "var(--red)";
-    return "var(--dim)";
-  };
-
   return (
     <div className="app">
-      {/* ── Header ── */}
+      {/* Header */}
       <header>
         <div className="logo">
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -201,7 +165,7 @@ export default function App() {
         </div>
       </header>
 
-      {/* ── Status Bar ── */}
+      {/* Status Bar */}
       <div className="status-bar">
         <div className="chip">
           <span className={`dot ${walletAddress ? "green" : ""}`} />
@@ -225,7 +189,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Video Grid ── */}
+      {/* Video Grid */}
       <div className="videos">
         <div className="video-box">
           <video ref={localVideoRef} autoPlay muted playsInline />
@@ -256,7 +220,7 @@ export default function App() {
         </div>
       </div>
 
-      {/* ── Controls ── */}
+      {/* Controls */}
       <div className="controls">
         {!walletAddress ? (
           <button className="btn primary" onClick={connectEphemeral}>
@@ -294,7 +258,7 @@ export default function App() {
         )}
       </div>
 
-      {/* ── Peer Address Input ── */}
+      {/* Peer Address Input */}
       {xmtpConnected && (
         <div className="panel">
           <h3>
@@ -316,7 +280,7 @@ export default function App() {
               Your XMTP inbox: <code>{inboxId}</code>{" "}
               <button
                 className="btn-copy"
-                onClick={() => { navigator.clipboard.writeText(inboxId); }}
+                onClick={() => { void navigator.clipboard.writeText(inboxId); }}
                 title="Copy to clipboard"
               >
                 📋
@@ -326,7 +290,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Encryption Info ── */}
+      {/* Encryption Info */}
       {connectionState === "connected" && (
         <div className="panel">
           <h4 className="panel-title">🔐 Encryption Details</h4>
@@ -351,7 +315,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── How It Works ── */}
+      {/* How It Works */}
       {!xmtpConnected && (
         <div className="panel">
           <h4 className="panel-title">How it works</h4>
@@ -360,7 +324,7 @@ export default function App() {
               <span className="step">1</span>
               <div>
                 <strong>Connect wallet</strong>
-                <p>Use an ephemeral wallet or sign in with MetaMask</p>
+                <p>Generate an ephemeral wallet to create your XMTP identity</p>
               </div>
             </div>
             <div className="step-card">
@@ -388,7 +352,7 @@ export default function App() {
         </div>
       )}
 
-      {/* ── Log ── */}
+      {/* Log */}
       <div className="log-box">
         <div className="log-header">
           <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
@@ -400,7 +364,7 @@ export default function App() {
           {logs.map((entry, i) => (
             <div key={i} className="log-entry">
               <span className="log-time">{entry.time}</span>
-              <span className={`log-msg ${entry.type || ""}`}>{entry.message}</span>
+              <span className={`log-msg ${entry.type ?? ""}`}>{entry.message}</span>
             </div>
           ))}
           {logs.length === 0 && (
