@@ -1,8 +1,10 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { Wallet } from "ethers";
-import { XmtpSignaling, createXmtpSigner } from "./xmtp-signaling";
-import { WebRTCManager, type ConnectionState } from "./webrtc-manager";
-import type { LogLevel } from "./types";
+import { XmtpSignaling } from "./XmtpSignaling";
+import { createXmtpSigner } from "./createXmtpSigner";
+import { WebRTCManager } from "./WebRTCManager";
+import type { ConnectionState } from "./ConnectionState";
+import type { LogLevel } from "./LogLevel";
 
 type LogEntry = {
   readonly time: string;
@@ -16,7 +18,8 @@ export default function App() {
   const [inboxId, setInboxId] = useState("");
 
   const [peerAddress, setPeerAddress] = useState("");
-  const [connectionState, setConnectionState] = useState<ConnectionState>("idle");
+  const [connectionState, setConnectionState] =
+    useState<ConnectionState>("idle");
   const [cameraActive, setCameraActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
 
@@ -43,34 +46,43 @@ export default function App() {
     logBoxRef.current?.scrollTo(0, logBoxRef.current.scrollHeight);
   }, [logs]);
 
-  const connectWithSigner = useCallback(async (address: string, signMessage: (msg: string) => Promise<string>) => {
-    try {
-      setWalletAddress(address);
-      log(`Wallet connected: ${address.slice(0, 8)}…${address.slice(-6)}`, "ok");
+  const connectWithSigner = useCallback(
+    async (address: string, signMessage: (msg: string) => Promise<string>) => {
+      try {
+        setWalletAddress(address);
+        log(
+          `Wallet connected: ${address.slice(0, 8)}…${address.slice(-6)}`,
+          "ok",
+        );
 
-      log("Connecting to XMTP network (dev)...");
-      const signaling = new XmtpSignaling();
-      const xmtpSigner = createXmtpSigner({ address, signMessage });
+        log("Connecting to XMTP network (dev)...");
+        const signaling = new XmtpSignaling();
+        const xmtpSigner = createXmtpSigner({ address, signMessage });
 
-      const id = await signaling.connect(xmtpSigner, "dev");
-      signalingRef.current = signaling;
-      setInboxId(id);
-      setXmtpConnected(true);
-      log(`XMTP connected — inbox: ${id.slice(0, 12)}…`, "ok");
+        const id = await signaling.connect(xmtpSigner, "dev");
+        signalingRef.current = signaling;
+        setInboxId(id);
+        setXmtpConnected(true);
+        log(`XMTP connected — inbox: ${id.slice(0, 12)}…`, "ok");
 
-      await signaling.startListening((msg, senderInboxId) => {
-        log(`Received ${msg.type} via XMTP from ${senderInboxId.slice(0, 12)}…`, "ok");
-        if (rtcRef.current && !rtcRef.current.isActive()) {
-          rtcRef.current.setPeerAddress(senderInboxId);
-        }
-        rtcRef.current?.handleSignalingMessage(msg);
-      });
-      log("Listening for incoming calls via XMTP...", "ok");
-    } catch (error: unknown) {
-      const message = error instanceof Error ? error.message : String(error);
-      log(`Connection failed: ${message}`, "err");
-    }
-  }, [log]);
+        await signaling.startListening((msg, senderInboxId) => {
+          log(
+            `Received ${msg.type} via XMTP from ${senderInboxId.slice(0, 12)}…`,
+            "ok",
+          );
+          if (rtcRef.current && !rtcRef.current.isActive()) {
+            rtcRef.current.setPeerAddress(senderInboxId);
+          }
+          rtcRef.current?.handleSignalingMessage(msg);
+        });
+        log("Listening for incoming calls via XMTP...", "ok");
+      } catch (error: unknown) {
+        const message = error instanceof Error ? error.message : String(error);
+        log(`Connection failed: ${message}`, "err");
+      }
+    },
+    [log],
+  );
 
   const connectEphemeral = useCallback(async () => {
     log("Generating ephemeral EOA wallet...");
@@ -82,7 +94,10 @@ export default function App() {
 
   const startCamera = useCallback(async () => {
     try {
-      const stream = await navigator.mediaDevices.getUserMedia({ video: true, audio: true });
+      const stream = await navigator.mediaDevices.getUserMedia({
+        video: true,
+        audio: true,
+      });
       localStreamRef.current = stream;
       if (localVideoRef.current) {
         localVideoRef.current.srcObject = stream;
@@ -147,7 +162,14 @@ export default function App() {
       {/* Header */}
       <header>
         <div className="logo">
-          <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+          <svg
+            width="22"
+            height="22"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+          >
             <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
             <path d="M7 11V7a5 5 0 0110 0v4" />
           </svg>
@@ -156,7 +178,9 @@ export default function App() {
           <h1>
             XMTP <span className="accent">×</span> WebRTC
           </h1>
-          <p className="subtitle">End-to-end encrypted video calls over decentralized messaging</p>
+          <p className="subtitle">
+            End-to-end encrypted video calls over decentralized messaging
+          </p>
         </div>
         <div className="badge-row">
           <span className="badge green">E2EE</span>
@@ -195,28 +219,46 @@ export default function App() {
           <video ref={localVideoRef} autoPlay muted playsInline />
           {!cameraActive && (
             <div className="placeholder">
-              <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <svg
+                width="32"
+                height="32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                viewBox="0 0 24 24"
+              >
                 <path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
               </svg>
               You
             </div>
           )}
           <span className="video-label">Local</span>
-          {connectionState === "connected" && <span className="e2ee-tag">🔒 E2EE</span>}
+          {connectionState === "connected" && (
+            <span className="e2ee-tag">🔒 E2EE</span>
+          )}
         </div>
 
         <div className="video-box">
           <video ref={remoteVideoRef} autoPlay playsInline />
           {connectionState !== "connected" && (
             <div className="placeholder">
-              <svg width="32" height="32" fill="none" stroke="currentColor" strokeWidth="1.5" viewBox="0 0 24 24">
+              <svg
+                width="32"
+                height="32"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="1.5"
+                viewBox="0 0 24 24"
+              >
                 <path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
               </svg>
               Peer
             </div>
           )}
           <span className="video-label">Remote</span>
-          {connectionState === "connected" && <span className="e2ee-tag">🔒 E2EE</span>}
+          {connectionState === "connected" && (
+            <span className="e2ee-tag">🔒 E2EE</span>
+          )}
         </div>
       </div>
 
@@ -224,14 +266,28 @@ export default function App() {
       <div className="controls">
         {!walletAddress ? (
           <button className="btn primary" onClick={connectEphemeral}>
-            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+            <svg
+              width="16"
+              height="16"
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+            >
               <path d="M13 10V3L4 14h7v7l9-11h-7z" />
             </svg>
             Connect Wallet
           </button>
         ) : !cameraActive ? (
           <button className="btn primary" onClick={startCamera}>
-            <svg width="16" height="16" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+            <svg
+              width="16"
+              height="16"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth="2"
+              viewBox="0 0 24 24"
+            >
               <path d="m15.75 10.5 4.72-4.72a.75.75 0 011.28.53v11.38a.75.75 0 01-1.28.53l-4.72-4.72M4.5 18.75h9a2.25 2.25 0 002.25-2.25v-9a2.25 2.25 0 00-2.25-2.25h-9A2.25 2.25 0 002.25 7.5v9a2.25 2.25 0 002.25 2.25z" />
             </svg>
             Start Camera
@@ -265,8 +321,8 @@ export default function App() {
             <span className="step">1</span> Enter peer's address or inbox ID
           </h3>
           <p className="hint">
-            The other person must also connect their wallet and be online with XMTP.
-            Share your inbox ID with them so they can call you too.
+            The other person must also connect their wallet and be online with
+            XMTP. Share your inbox ID with them so they can call you too.
           </p>
           <input
             type="text"
@@ -280,7 +336,9 @@ export default function App() {
               Your XMTP inbox: <code>{inboxId}</code>{" "}
               <button
                 className="btn-copy"
-                onClick={() => { void navigator.clipboard.writeText(inboxId); }}
+                onClick={() => {
+                  void navigator.clipboard.writeText(inboxId);
+                }}
                 title="Copy to clipboard"
               >
                 📋
@@ -331,21 +389,28 @@ export default function App() {
               <span className="step">2</span>
               <div>
                 <strong>Share addresses</strong>
-                <p>Exchange Ethereum addresses with the person you want to call</p>
+                <p>
+                  Exchange Ethereum addresses with the person you want to call
+                </p>
               </div>
             </div>
             <div className="step-card">
               <span className="step">3</span>
               <div>
                 <strong>Call</strong>
-                <p>WebRTC offer/answer is exchanged over XMTP's E2EE messaging layer</p>
+                <p>
+                  WebRTC offer/answer is exchanged over XMTP's E2EE messaging
+                  layer
+                </p>
               </div>
             </div>
             <div className="step-card">
               <span className="step">4</span>
               <div>
                 <strong>Talk securely</strong>
-                <p>Video & audio are encrypted end-to-end with no central server</p>
+                <p>
+                  Video & audio are encrypted end-to-end with no central server
+                </p>
               </div>
             </div>
           </div>
@@ -355,7 +420,14 @@ export default function App() {
       {/* Log */}
       <div className="log-box">
         <div className="log-header">
-          <svg width="14" height="14" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+          <svg
+            width="14"
+            height="14"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            viewBox="0 0 24 24"
+          >
             <path d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3M3.375 3h17.25c.621 0 1.125.504 1.125 1.125v15.75c0 .621-.504 1.125-1.125 1.125H3.375c-.621 0-1.125-.504-1.125-1.125V4.125C2.25 3.504 2.754 3 3.375 3z" />
           </svg>
           Event Log
@@ -364,7 +436,9 @@ export default function App() {
           {logs.map((entry, i) => (
             <div key={i} className="log-entry">
               <span className="log-time">{entry.time}</span>
-              <span className={`log-msg ${entry.type ?? ""}`}>{entry.message}</span>
+              <span className={`log-msg ${entry.type ?? ""}`}>
+                {entry.message}
+              </span>
             </div>
           ))}
           {logs.length === 0 && (

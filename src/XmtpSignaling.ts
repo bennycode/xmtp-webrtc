@@ -1,45 +1,7 @@
+import type { Dm, Signer } from "@xmtp/browser-sdk";
 import { Client, IdentifierKind } from "@xmtp/browser-sdk";
-import type { Signer, Identifier, Dm } from "@xmtp/browser-sdk";
-
-export type SignalingMessage =
-  | { readonly type: "offer"; readonly sdp: string }
-  | { readonly type: "answer"; readonly sdp: string }
-  | { readonly type: "ice-candidate"; readonly candidate: string; readonly sdpMid: string | null; readonly sdpMLineIndex: number | null }
-  | { readonly type: "hangup" };
-
-type SignalingCallback = (msg: SignalingMessage, senderInboxId: string) => void;
-
-type XmtpEnvironment = "dev" | "production";
-
-export function createXmtpSigner(wallet: {
-  address: string;
-  signMessage: (message: string) => Promise<string>;
-}): Signer {
-  return {
-    type: "EOA" as const,
-    getIdentifier: (): Identifier => ({
-      identifier: wallet.address,
-      identifierKind: IdentifierKind.Ethereum,
-    }),
-    signMessage: async (message: string) => {
-      const hexSig = await wallet.signMessage(message);
-      return new Uint8Array(
-        hexSig
-          .replace(/^0x/, "")
-          .match(/.{1,2}/g)!
-          .map((b) => parseInt(b, 16))
-      );
-    },
-  };
-}
-
-function isSignalingMessage(value: unknown): value is SignalingMessage {
-  if (typeof value !== "object" || value === null || !("type" in value)) {
-    return false;
-  }
-  const { type } = value;
-  return type === "offer" || type === "answer" || type === "ice-candidate" || type === "hangup";
-}
+import { SignalingCodec, SignalingContentType } from "./SignalingCodec";
+import type { SignalingCallback, SignalingMessage } from "./SignalingMessage";
 
 export class XmtpSignaling {
   private client: Client | null = null;
@@ -48,9 +10,12 @@ export class XmtpSignaling {
   private readonly dmCache = new Map<string, Dm>();
   private readonly dmPending = new Map<string, Promise<Dm>>();
 
-  async connect(signer: Signer, env: XmtpEnvironment = "dev") {
-    this.client = await Client.create(signer, { env });
-    return this.client.inboxId!;
+  async connect(signer: Signer, env: "dev" | "production" = "dev") {
+    const client = await Client.create(signer, { env });
+    this.client = client;
+    const { inboxId } = client;
+    if (!inboxId) throw new Error("XMTP client created without inbox ID");
+    return inboxId;
   }
 
   getClient() {
@@ -87,7 +52,7 @@ export class XmtpSignaling {
   async sendSignal(peerInboxId: string, message: SignalingMessage) {
     if (!this.client) throw new Error("XMTP client not connected");
     const dm = await this.getOrCreateDm(peerInboxId);
-    await dm.sendText(JSON.stringify(message));
+    await dm.send(SignalingCodec.encode(message));
   }
 
   async sendSignalByAddress(peerAddress: string, message: SignalingMessage) {
@@ -95,7 +60,7 @@ export class XmtpSignaling {
 
     const cached = this.dmCache.get(peerAddress);
     if (cached) {
-      await cached.sendText(JSON.stringify(message));
+      await cached.send(SignalingCodec.encode(message));
       return;
     }
 
@@ -104,7 +69,9 @@ export class XmtpSignaling {
     ]);
 
     if (!canMessage.get(peerAddress.toLowerCase())) {
-      throw new Error(`Address ${peerAddress} is not registered on XMTP. They need to connect first.`);
+      throw new Error(
+        `Address ${peerAddress} is not registered on XMTP. They need to connect first.`,
+      );
     }
 
     const inboxId = await this.client.fetchInboxIdByIdentifier({
@@ -118,7 +85,7 @@ export class XmtpSignaling {
 
     const dm = await this.getOrCreateDm(inboxId);
     this.dmCache.set(peerAddress, dm);
-    await dm.sendText(JSON.stringify(message));
+    await dm.send(SignalingCodec.encode(message));
   }
 
   async startListening(callback: SignalingCallback) {
@@ -134,19 +101,13 @@ export class XmtpSignaling {
       onValue: (decodedMessage) => {
         if (decodedMessage.senderInboxId === ownInboxId) return;
 
-        try {
-          const content =
-            typeof decodedMessage.content === "string"
-              ? decodedMessage.content
-              : String(decodedMessage.content);
-
-          const parsed: unknown = JSON.parse(content);
-
-          if (isSignalingMessage(parsed)) {
-            this.onMessage?.(parsed, decodedMessage.senderInboxId);
-          }
-        } catch {
-          // Not a signaling message
+        const { contentType } = decodedMessage;
+        if (
+          contentType.authorityId === SignalingContentType.authorityId &&
+          contentType.typeId === SignalingContentType.typeId
+        ) {
+          const content = decodedMessage.content as SignalingMessage;
+          this.onMessage?.(content, decodedMessage.senderInboxId);
         }
       },
       onError: (error) => {
