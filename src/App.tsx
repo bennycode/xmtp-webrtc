@@ -50,12 +50,9 @@ export default function App() {
     async (address: string, signMessage: (msg: string) => Promise<string>) => {
       try {
         setWalletAddress(address);
-        log(
-          `Wallet connected: ${address.slice(0, 8)}…${address.slice(-6)}`,
-          "ok",
-        );
+        log(`Connected`, "ok");
 
-        log("Connecting to XMTP network (dev)...");
+        log("Connecting to secure network...");
         const signaling = new XmtpSignaling();
         const xmtpSigner = createXmtpSigner({ address, signMessage });
 
@@ -63,11 +60,11 @@ export default function App() {
         signalingRef.current = signaling;
         setInboxId(id);
         setXmtpConnected(true);
-        log(`XMTP connected — inbox: ${id.slice(0, 12)}…`, "ok");
+        log(`Ready — your ID: ${id.slice(0, 12)}...`, "ok");
 
         await signaling.startListening((msg, senderInboxId) => {
           log(
-            `Received ${msg.type} via XMTP from ${senderInboxId.slice(0, 12)}…`,
+            `Incoming signal from ${senderInboxId.slice(0, 8)}...`,
             "ok",
           );
           if (rtcRef.current && !rtcRef.current.isActive()) {
@@ -75,7 +72,7 @@ export default function App() {
           }
           rtcRef.current?.handleSignalingMessage(msg);
         });
-        log("Listening for incoming calls via XMTP...", "ok");
+        log("Ready for calls", "ok");
       } catch (error: unknown) {
         const message = error instanceof Error ? error.message : String(error);
         log(`Connection failed: ${message}`, "err");
@@ -85,10 +82,10 @@ export default function App() {
   );
 
   const connectEphemeral = useCallback(async () => {
-    log("Generating ephemeral EOA wallet...");
+    log("Setting up...");
     const wallet = Wallet.createRandom();
     const { address } = wallet;
-    log(`Ephemeral wallet: ${address.slice(0, 8)}…${address.slice(-6)}`, "ok");
+    log("Account created", "ok");
     await connectWithSigner(address, (msg) => wallet.signMessage(msg));
   }, [connectWithSigner, log]);
 
@@ -163,55 +160,21 @@ export default function App() {
       <header>
         <div className="logo">
           <svg
-            width="22"
-            height="22"
+            width="20"
+            height="20"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
             strokeWidth="2"
           >
-            <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-            <path d="M7 11V7a5 5 0 0110 0v4" />
+            <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
           </svg>
         </div>
         <div>
-          <h1>
-            XMTP <span className="accent">×</span> WebRTC
-          </h1>
-          <p className="subtitle">
-            End-to-end encrypted video calls over decentralized messaging
-          </p>
-        </div>
-        <div className="badge-row">
-          <span className="badge green">E2EE</span>
-          <span className="badge purple">XMTP Signaling</span>
-          <span className="badge blue">WebRTC</span>
+          <h1>SecureCall</h1>
+          <p className="subtitle">Private, encrypted video calls</p>
         </div>
       </header>
-
-      {/* Status Bar */}
-      <div className="status-bar">
-        <div className="chip">
-          <span className={`dot ${walletAddress ? "green" : ""}`} />
-          {walletAddress
-            ? `${walletAddress.slice(0, 6)}…${walletAddress.slice(-4)}`
-            : "Wallet disconnected"}
-        </div>
-        <div className="chip">
-          <span className={`dot ${xmtpConnected ? "green" : ""}`} />
-          {xmtpConnected ? "XMTP online" : "XMTP offline"}
-        </div>
-        <div className="chip">
-          <span className={`dot ${cameraActive ? "green" : ""}`} />
-          {cameraActive ? "Camera on" : "Camera off"}
-        </div>
-        <div className="chip">
-          <span
-            className={`dot ${connectionState === "connected" ? "green" : connectionState === "connecting" ? "yellow pulse" : connectionState === "failed" ? "red" : ""}`}
-          />
-          {connectionState === "idle" ? "No call" : connectionState}
-        </div>
-      </div>
 
       {/* Video Grid */}
       <div className="videos">
@@ -220,8 +183,8 @@ export default function App() {
           {!cameraActive && (
             <div className="placeholder">
               <svg
-                width="32"
-                height="32"
+                width="40"
+                height="40"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
@@ -232,9 +195,21 @@ export default function App() {
               You
             </div>
           )}
-          <span className="video-label">Local</span>
           {connectionState === "connected" && (
-            <span className="e2ee-tag">🔒 E2EE</span>
+            <span className="e2ee-tag">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              Encrypted
+            </span>
           )}
         </div>
 
@@ -243,8 +218,8 @@ export default function App() {
           {connectionState !== "connected" && (
             <div className="placeholder">
               <svg
-                width="32"
-                height="32"
+                width="40"
+                height="40"
                 fill="none"
                 stroke="currentColor"
                 strokeWidth="1.5"
@@ -252,12 +227,24 @@ export default function App() {
               >
                 <path d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.5 20.25a8.25 8.25 0 0115 0" />
               </svg>
-              Peer
+              Waiting...
             </div>
           )}
-          <span className="video-label">Remote</span>
           {connectionState === "connected" && (
-            <span className="e2ee-tag">🔒 E2EE</span>
+            <span className="e2ee-tag">
+              <svg
+                width="12"
+                height="12"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+              >
+                <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
+                <path d="M7 11V7a5 5 0 0110 0v4" />
+              </svg>
+              Encrypted
+            </span>
           )}
         </div>
       </div>
@@ -266,17 +253,7 @@ export default function App() {
       <div className="controls">
         {!walletAddress ? (
           <button className="btn primary" onClick={connectEphemeral}>
-            <svg
-              width="16"
-              height="16"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="currentColor"
-              strokeWidth="2"
-            >
-              <path d="M13 10V3L4 14h7v7l9-11h-7z" />
-            </svg>
-            Connect Wallet
+            Get Started
           </button>
         ) : !cameraActive ? (
           <button className="btn primary" onClick={startCamera}>
@@ -295,11 +272,11 @@ export default function App() {
         ) : (
           <>
             <button className="btn" onClick={toggleMute}>
-              {isMuted ? "🔇 Unmute" : "🎙 Mute"}
+              {isMuted ? "Unmute" : "Mute"}
             </button>
             {connectionState === "connected" ? (
               <button className="btn danger" onClick={hangUp}>
-                ✕ Hang Up
+                End Call
               </button>
             ) : (
               <button
@@ -307,33 +284,30 @@ export default function App() {
                 onClick={callPeer}
                 disabled={!peerAddress || connectionState === "connecting"}
               >
-                📞 Call Peer
+                Call
               </button>
             )}
           </>
         )}
       </div>
 
-      {/* Peer Address Input */}
+      {/* Peer Input */}
       {xmtpConnected && (
         <div className="panel">
-          <h3>
-            <span className="step">1</span> Enter peer's address or inbox ID
-          </h3>
+          <h3>Call someone</h3>
           <p className="hint">
-            The other person must also connect their wallet and be online with
-            XMTP. Share your inbox ID with them so they can call you too.
+            Share your ID with a friend, or enter theirs to start a call.
           </p>
           <input
             type="text"
-            placeholder="0x… or inbox ID"
+            placeholder="Enter your friend's ID"
             value={peerAddress}
             onChange={(e) => setPeerAddress(e.target.value)}
             className="input"
           />
           {inboxId && (
-            <p className="hint" style={{ marginTop: 8 }}>
-              Your XMTP inbox: <code>{inboxId}</code>{" "}
+            <p className="hint" style={{ marginTop: 12 }}>
+              Your ID: <code>{inboxId}</code>{" "}
               <button
                 className="btn-copy"
                 onClick={() => {
@@ -341,83 +315,24 @@ export default function App() {
                 }}
                 title="Copy to clipboard"
               >
-                📋
+                Copy
               </button>
             </p>
           )}
         </div>
       )}
 
-      {/* Encryption Info */}
-      {connectionState === "connected" && (
+      {/* Onboarding */}
+      {!walletAddress && (
         <div className="panel">
-          <h4 className="panel-title">🔐 Encryption Details</h4>
-          <div className="info-grid">
-            <div className="info-item">
-              <span className="label">Signaling</span>
-              <span className="value green">XMTP MLS (E2EE)</span>
-            </div>
-            <div className="info-item">
-              <span className="label">Media Transport</span>
-              <span className="value green">DTLS-SRTP</span>
-            </div>
-            <div className="info-item">
-              <span className="label">Key Exchange</span>
-              <span className="value green">ECDHE (ephemeral)</span>
-            </div>
-            <div className="info-item">
-              <span className="label">Signaling Server</span>
-              <span className="value green">None (decentralized)</span>
-            </div>
-          </div>
+          <h3>Private video calls, no account needed</h3>
+          <p className="hint">
+            End-to-end encrypted. No sign-up required. Just click Get Started.
+          </p>
         </div>
       )}
 
-      {/* How It Works */}
-      {!xmtpConnected && (
-        <div className="panel">
-          <h4 className="panel-title">How it works</h4>
-          <div className="how-it-works">
-            <div className="step-card">
-              <span className="step">1</span>
-              <div>
-                <strong>Connect wallet</strong>
-                <p>Generate an ephemeral wallet to create your XMTP identity</p>
-              </div>
-            </div>
-            <div className="step-card">
-              <span className="step">2</span>
-              <div>
-                <strong>Share addresses</strong>
-                <p>
-                  Exchange Ethereum addresses with the person you want to call
-                </p>
-              </div>
-            </div>
-            <div className="step-card">
-              <span className="step">3</span>
-              <div>
-                <strong>Call</strong>
-                <p>
-                  WebRTC offer/answer is exchanged over XMTP's E2EE messaging
-                  layer
-                </p>
-              </div>
-            </div>
-            <div className="step-card">
-              <span className="step">4</span>
-              <div>
-                <strong>Talk securely</strong>
-                <p>
-                  Video & audio are encrypted end-to-end with no central server
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* Log */}
+      {/* Activity */}
       <div className="log-box">
         <div className="log-header">
           <svg
@@ -428,9 +343,9 @@ export default function App() {
             strokeWidth="2"
             viewBox="0 0 24 24"
           >
-            <path d="m6.75 7.5 3 2.25-3 2.25m4.5 0h3M3.375 3h17.25c.621 0 1.125.504 1.125 1.125v15.75c0 .621-.504 1.125-1.125 1.125H3.375c-.621 0-1.125-.504-1.125-1.125V4.125C2.25 3.504 2.754 3 3.375 3z" />
+            <path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9M13.73 21a2 2 0 01-3.46 0" />
           </svg>
-          Event Log
+          Activity
         </div>
         <div className="log-content" ref={logBoxRef}>
           {logs.map((entry, i) => (
@@ -444,7 +359,7 @@ export default function App() {
           {logs.length === 0 && (
             <div className="log-entry">
               <span className="log-time">--:--:--</span>
-              <span className="log-msg">Connect your wallet to begin</span>
+              <span className="log-msg">Click Get Started to begin</span>
             </div>
           )}
         </div>
