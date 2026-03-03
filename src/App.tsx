@@ -17,13 +17,17 @@ export default function App() {
   const [xmtpConnected, setXmtpConnected] = useState(false);
   const [inboxId, setInboxId] = useState("");
 
-  const [peerAddress, setPeerAddress] = useState("");
+  const [peerAddress, setPeerAddress] = useState(
+    () => new URLSearchParams(window.location.search).get("partner") ?? "",
+  );
   const [connectionState, setConnectionState] =
     useState<ConnectionState>("idle");
   const [cameraActive, setCameraActive] = useState(false);
   const [isMuted, setIsMuted] = useState(false);
+  const [isVideoOff, setIsVideoOff] = useState(false);
 
   const [logs, setLogs] = useState<readonly LogEntry[]>([]);
+  const [copiedLink, setCopiedLink] = useState(false);
 
   const localVideoRef = useRef<HTMLVideoElement>(null);
   const remoteVideoRef = useRef<HTMLVideoElement>(null);
@@ -63,10 +67,7 @@ export default function App() {
         log(`Ready — your ID: ${id.slice(0, 12)}...`, "ok");
 
         await signaling.startListening((msg, senderInboxId) => {
-          log(
-            `Incoming signal from ${senderInboxId.slice(0, 8)}...`,
-            "ok",
-          );
+          log(`Incoming signal from ${senderInboxId.slice(0, 8)}...`, "ok");
           if (rtcRef.current && !rtcRef.current.isActive()) {
             rtcRef.current.setPeerAddress(senderInboxId);
           }
@@ -85,7 +86,7 @@ export default function App() {
     log("Setting up...");
     const wallet = Wallet.createRandom();
     const { address } = wallet;
-    log("Account created", "ok");
+    log("XMTP Account created", "ok");
     await connectWithSigner(address, (msg) => wallet.signMessage(msg));
   }, [connectWithSigner, log]);
 
@@ -148,6 +149,16 @@ export default function App() {
     log(shouldMute ? "Microphone muted" : "Microphone unmuted");
   }, [isMuted, log]);
 
+  const toggleVideo = useCallback(() => {
+    if (!localStreamRef.current) return;
+    const shouldHide = !isVideoOff;
+    for (const track of localStreamRef.current.getVideoTracks()) {
+      track.enabled = !shouldHide;
+    }
+    setIsVideoOff(shouldHide);
+    log(shouldHide ? "Camera off" : "Camera on");
+  }, [isVideoOff, log]);
+
   useEffect(() => {
     if (rtcRef.current && peerAddress) {
       rtcRef.current.setPeerAddress(peerAddress);
@@ -171,8 +182,18 @@ export default function App() {
           </svg>
         </div>
         <div>
-          <h1>SecureCall</h1>
-          <p className="subtitle">Private, encrypted video calls</p>
+          <h1>SealedCall</h1>
+          <p className="subtitle">
+            Private, encrypted video calls secured by{" "}
+            <a
+              href="https://xmtp.org"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              XMTP
+            </a>
+            .
+          </p>
         </div>
       </header>
 
@@ -253,7 +274,7 @@ export default function App() {
       <div className="controls">
         {!walletAddress ? (
           <button className="btn primary" onClick={connectEphemeral}>
-            Get Started
+            Start Call
           </button>
         ) : !cameraActive ? (
           <button className="btn primary" onClick={startCamera}>
@@ -274,6 +295,9 @@ export default function App() {
             <button className="btn" onClick={toggleMute}>
               {isMuted ? "Unmute" : "Mute"}
             </button>
+            <button className="btn" onClick={toggleVideo}>
+              {isVideoOff ? "Show Video" : "Hide Video"}
+            </button>
             {connectionState === "connected" ? (
               <button className="btn danger" onClick={hangUp}>
                 End Call
@@ -291,34 +315,31 @@ export default function App() {
         )}
       </div>
 
-      {/* Peer Input */}
-      {xmtpConnected && (
+      {/* Invite */}
+      {xmtpConnected && inboxId && (
         <div className="panel">
-          <h3>Call someone</h3>
+          <h3>Invite someone to call</h3>
           <p className="hint">
-            Share your ID with a friend, or enter theirs to start a call.
+            Copy your invite link and send it to the person who should join your
+            call.
           </p>
-          <input
-            type="text"
-            placeholder="Enter your friend's ID"
-            value={peerAddress}
-            onChange={(e) => setPeerAddress(e.target.value)}
-            className="input"
-          />
-          {inboxId && (
-            <p className="hint" style={{ marginTop: 12 }}>
-              Your ID: <code>{inboxId}</code>{" "}
-              <button
-                className="btn-copy"
-                onClick={() => {
-                  void navigator.clipboard.writeText(inboxId);
-                }}
-                title="Copy to clipboard"
-              >
-                Copy
-              </button>
-            </p>
-          )}
+          <div style={{ display: "flex", justifyContent: "center" }}>
+            <button
+              className="btn primary"
+              onClick={() => {
+                const url = new URL(window.location.href);
+                url.searchParams.set("partner", inboxId);
+                void navigator.clipboard.writeText(url.toString());
+                setCopiedLink(true);
+                setTimeout(() => setCopiedLink(false), 2000);
+              }}
+            >
+              {copiedLink ? "Copied!" : "Copy invite link"}
+            </button>
+          </div>
+          <p className="hint" style={{ marginTop: 10, marginBottom: 0 }}>
+            They'll open the link and connect to you directly.
+          </p>
         </div>
       )}
 
@@ -327,7 +348,11 @@ export default function App() {
         <div className="panel">
           <h3>Private video calls, no account needed</h3>
           <p className="hint">
-            End-to-end encrypted. No sign-up required. Just click Get Started.
+            End-to-end encrypted. No sign-up required. Secured by{" "}
+            <a href="https://xmtp.org/" target="_blank" rel="noopener noreferrer">
+              XMTP
+            </a>
+            .
           </p>
         </div>
       )}

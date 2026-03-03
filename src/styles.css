@@ -1,11 +1,11 @@
 /* ── Variables ──────────────────────────────────────────────────── */
 
 :root {
-  --bg: #f8f9fb;
+  --bg: #eeeef3;
   --surface: #ffffff;
-  --border: #e5e7eb;
-  --text: #1e1e2e;
-  --dim: #6b7280;
+  --border: #c0c5ce;
+  --text: #111827;
+  --dim: #4b5563;
   --primary: #4f46e5;
   --primary-hover: #4338ca;
   --green: #10b981;
@@ -15,7 +15,7 @@
   --sans: "DM Sans", system-ui, sans-serif;
   --mono: ui-monospace, "SF Mono", "Menlo", monospace;
   --radius: 12px;
-  --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+  --shadow: 0 1px 3px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Reset ─────────────────────────────────────────────────────── */
@@ -80,6 +80,16 @@ h1 {
   margin-top: 1px;
 }
 
+.subtitle a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.subtitle a:hover {
+  text-decoration: underline;
+}
+
 /* ── Videos ────────────────────────────────────────────────────── */
 
 .videos {
@@ -93,6 +103,7 @@ h1 {
   position: relative;
   border-radius: var(--radius);
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   overflow: hidden;
   aspect-ratio: 16 / 10;
@@ -103,7 +114,7 @@ h1 {
   height: 100%;
   object-fit: cover;
   display: block;
-  background: #e5e7eb;
+  background: #d1d5db;
 }
 
 .e2ee-tag {
@@ -129,15 +140,15 @@ h1 {
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  color: #9ca3af;
+  color: #6b7280;
   font-size: 13px;
   font-weight: 500;
   gap: 8px;
-  background: #f3f4f6;
+  background: #dfe2e8;
 }
 
 .placeholder svg {
-  opacity: 0.4;
+  opacity: 0.55;
 }
 
 /* ── Controls ──────────────────────────────────────────────────── */
@@ -167,7 +178,7 @@ h1 {
 }
 
 .btn:hover {
-  background: #f3f4f6;
+  background: #e5e7eb;
   border-color: #d1d5db;
 }
 
@@ -207,6 +218,7 @@ h1 {
 
 .panel {
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   border-radius: var(--radius);
   padding: 24px;
@@ -227,10 +239,20 @@ h1 {
   line-height: 1.5;
 }
 
+.panel .hint a {
+  color: var(--primary);
+  text-decoration: none;
+  font-weight: 500;
+}
+
+.panel .hint a:hover {
+  text-decoration: underline;
+}
+
 .panel .hint code {
   font-family: var(--mono);
   font-size: 11px;
-  background: #f3f4f6;
+  background: #e5e7eb;
   padding: 2px 8px;
   border-radius: 4px;
   color: var(--text);
@@ -257,7 +279,7 @@ h1 {
 }
 
 .input::placeholder {
-  color: #9ca3af;
+  color: #6b7280;
 }
 
 .btn-copy {
@@ -281,6 +303,7 @@ h1 {
 
 .log-box {
   background: var(--surface);
+  border: 1px solid var(--border);
   box-shadow: var(--shadow);
   border-radius: var(--radius);
   overflow: hidden;
@@ -326,11 +349,11 @@ h1 {
 }
 
 .log-entry + .log-entry {
-  border-top: 1px solid #f3f4f6;
+  border-top: 1px solid #e5e7eb;
 }
 
 .log-time {
-  color: #9ca3af;
+  color: #6b7280;
   font-size: 12px;
   flex-shrink: 0;
 }
