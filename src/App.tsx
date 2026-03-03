@@ -6,6 +6,8 @@ import { WebRTCManager } from "./WebRTCManager";
 import type { ConnectionState } from "./ConnectionState";
 import type { LogLevel } from "./LogLevel";
 
+declare const __COMMIT_HASH__: string;
+
 type LogEntry = {
   readonly time: string;
   readonly message: string;
@@ -484,6 +486,8 @@ export default function App() {
           )}
         </div>
       </div>
+
+      <footer className="build-info">Build {__COMMIT_HASH__}</footer>
     </div>
   );
 }

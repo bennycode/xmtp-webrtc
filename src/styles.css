@@ -408,6 +408,16 @@ h1 {
   color: var(--red);
 }
 
+/* ── Build Info ────────────────────────────────────────────────── */
+
+.build-info {
+  text-align: center;
+  font-size: 11px;
+  color: var(--dim);
+  margin-top: 20px;
+  opacity: 0.5;
+}
+
 /* ── Responsive ────────────────────────────────────────────────── */
 
 @media (max-width: 640px) {
