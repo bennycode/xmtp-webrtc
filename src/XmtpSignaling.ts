@@ -1,7 +1,6 @@
 import type { Dm, Signer } from "@xmtp/browser-sdk";
 import { Client, IdentifierKind } from "@xmtp/browser-sdk";
-import type { EncodedContent } from "@xmtp/wasm-bindings";
-import { SignalingCodec, SignalingContentType } from "./SignalingCodec";
+import { SignalingCodec } from "./SignalingCodec";
 import type { SignalingCallback, SignalingMessage } from "./SignalingMessage";
 
 export class XmtpSignaling {
@@ -12,7 +11,16 @@ export class XmtpSignaling {
   private readonly dmPending = new Map<string, Promise<Dm>>();
 
   async connect(signer: Signer, env: "dev" | "production" = "dev") {
-    const client = await Client.create(signer, { env });
+    // Workaround: browser SDK stores the full options object (including codecs)
+    // and later sends it to a Web Worker via postMessage. Functions can't be
+    // cloned, so we make `codecs` non-enumerable — the CodecRegistry constructor
+    // reads it before init() posts to the worker, and structured clone skips it.
+    const options = { env } as Record<string, unknown>;
+    Object.defineProperty(options, "codecs", {
+      value: [SignalingCodec],
+      enumerable: false,
+    });
+    const client = await Client.create(signer, options);
     this.client = client;
     const { inboxId } = client;
     if (!inboxId) throw new Error("XMTP client created without inbox ID");
@@ -102,14 +110,9 @@ export class XmtpSignaling {
       onValue: (decodedMessage) => {
         if (decodedMessage.senderInboxId === ownInboxId) return;
 
-        const { contentType } = decodedMessage;
-        if (
-          contentType.authorityId === SignalingContentType.authorityId &&
-          contentType.typeId === SignalingContentType.typeId
-        ) {
-          const encoded = decodedMessage.content as EncodedContent;
-          const message = SignalingCodec.decode(encoded);
-          this.onMessage?.(message, decodedMessage.senderInboxId);
+        const content = decodedMessage.content as SignalingMessage | undefined;
+        if (content && typeof content === "object" && "type" in content) {
+          this.onMessage?.(content, decodedMessage.senderInboxId);
         }
       },
       onError: (error) => {

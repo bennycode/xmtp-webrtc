@@ -12,7 +12,7 @@ export const SignalingContentType: ContentTypeId = {
 const encoder = new TextEncoder();
 const decoder = new TextDecoder();
 
-export const SignalingCodec = {
+export const SignalingCodec: ContentCodec<SignalingMessage> = {
   contentType: SignalingContentType,
 
   encode(content: SignalingMessage): EncodedContent {
@@ -36,7 +36,7 @@ export const SignalingCodec = {
   },
 
   shouldPush: () => false,
-} satisfies ContentCodec<SignalingMessage>;
+};
 
 function isSignalingMessage(value: unknown): value is SignalingMessage {
   if (typeof value !== "object" || value === null || !("type" in value)) {
