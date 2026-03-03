@@ -182,7 +182,7 @@ export default function App() {
           </svg>
         </div>
         <div>
-          <h1>SealedCall</h1>
+          <h1>SealedCall.com</h1>
           <p className="subtitle">
             Private, encrypted video calls secured by{" "}
             <a
@@ -349,7 +349,11 @@ export default function App() {
           <h3>Private video calls, no account needed</h3>
           <p className="hint">
             End-to-end encrypted. No sign-up required. Secured by{" "}
-            <a href="https://xmtp.org/" target="_blank" rel="noopener noreferrer">
+            <a
+              href="https://xmtp.org/"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
               XMTP
             </a>
             .

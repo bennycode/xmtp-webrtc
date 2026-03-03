@@ -12,48 +12,13 @@ End-to-end encrypted video calls where the **signaling itself** is encrypted via
 
 This app uses Google's public STUN servers (`stun.l.google.com`) for NAT traversal. STUN servers **do not compromise E2EE** — their only role is helping peers discover their public IP addresses so they can establish a direct connection. They never see any media content, signaling data, or message payloads.
 
-| Component | What it knows | What it can't see |
-|---|---|---|
-| STUN server | That two IP addresses are trying to connect | Who the users are, what they're saying, any media content |
-| XMTP network | Encrypted signaling blobs between two inbox IDs | SDP/ICE content (encrypted via MLS) |
-| No one else | — | Everything is E2EE |
+| Component    | What it knows                                   | What it can't see                                         |
+| ------------ | ----------------------------------------------- | --------------------------------------------------------- |
+| STUN server  | That two IP addresses are trying to connect     | Who the users are, what they're saying, any media content |
+| XMTP network | Encrypted signaling blobs between two inbox IDs | SDP/ICE content (encrypted via MLS)                       |
+| No one else  | —                                               | Everything is E2EE                                        |
 
 Even if a **TURN** relay were added (for networks where direct connections fail), DTLS-SRTP still encrypts all media — the relay would only forward opaque encrypted bytes.
-
-## Architecture
-
-```mermaid
-sequenceDiagram
-    participant A as Person A
-    participant XMTP as XMTP Network (E2EE)
-    participant B as Person B
-
-    A->>A: Generate Ephemeral Wallet
-    B->>B: Generate Ephemeral Wallet
-    A->>XMTP: Create XMTP Client
-    B->>XMTP: Create XMTP Client
-
-    rect rgb(40, 40, 60)
-        Note over A, B: Signaling via XMTP MLS (E2EE)
-        A->>XMTP: SDP Offer
-        XMTP->>B: SDP Offer
-        B->>XMTP: SDP Answer
-        XMTP->>A: SDP Answer
-        A-->>XMTP: ICE Candidates
-        XMTP-->>B: ICE Candidates
-        B-->>XMTP: ICE Candidates
-        XMTP-->>A: ICE Candidates
-    end
-
-    rect rgb(30, 60, 40)
-        Note over A, B: WebRTC Peer Connection (DTLS-SRTP)
-        A<->B: Encrypted Audio/Video Stream
-    end
-```
-
-## Prerequisites
-
-- **Node.js** 18+ (LTS recommended)
 
 ## Setup
 
@@ -72,6 +37,7 @@ The app will be available at `http://localhost:5173`.
 ## How to Make a Call
 
 ### Person A (Caller)
+
 1. Open the app in Chrome/Firefox
 2. Click **Connect Wallet** — an ephemeral wallet is generated instantly
 3. Wait for "XMTP online" status
@@ -80,6 +46,7 @@ The app will be available at `http://localhost:5173`.
 6. Click **Call Peer**
 
 ### Person B (Callee)
+
 1. Open the app in a separate browser/profile/device
 2. Click **Connect Wallet**
 3. Wait for "XMTP online" status
@@ -109,17 +76,22 @@ src/
 ## Key Files
 
 ### `xmtpSignaling.ts`
+
 Wraps the XMTP Browser SDK to provide a signaling channel for WebRTC. Handles:
+
 - Client creation with custom signaling codec
 - Sending/receiving signaling messages as XMTP DMs
 - DM conversation caching for reliable ICE candidate delivery
 - Streaming incoming messages
 
 ### `signalingCodec.ts`
+
 Custom XMTP content type (`xmtp-webrtc.example/webrtc-signaling`) that encodes signaling messages as structured binary payloads instead of plain text.
 
 ### `webrtcManager.ts`
+
 Manages the RTCPeerConnection lifecycle. Handles:
+
 - Creating offers/answers
 - ICE candidate exchange (via XMTP)
 - Connection state tracking
@@ -136,9 +108,6 @@ const id = await signaling.connect(xmtpSigner, "production");
 
 ## Limitations
 
-- The XMTP Browser SDK is currently in **alpha** — expect breaking changes
-- Both parties must have registered on XMTP before they can exchange messages
-- Only one browser tab can use the XMTP Browser SDK at a time (OPFS limitation)
 - STUN servers (Google) are used for NAT traversal — they see IP addresses but not media content
 
 ## License
