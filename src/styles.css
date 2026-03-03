@@ -16,7 +16,6 @@
   --mono: ui-monospace, "SF Mono", "Menlo", monospace;
   --radius: 12px;
   --shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
-  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.06);
 }
 
 /* ── Reset ─────────────────────────────────────────────────────── */
@@ -105,19 +104,6 @@ h1 {
   object-fit: cover;
   display: block;
   background: #e5e7eb;
-}
-
-.video-label {
-  position: absolute;
-  bottom: 10px;
-  left: 10px;
-  font-size: 12px;
-  font-weight: 500;
-  background: rgba(255, 255, 255, 0.85);
-  backdrop-filter: blur(8px);
-  padding: 4px 10px;
-  border-radius: 6px;
-  color: var(--dim);
 }
 
 .e2ee-tag {

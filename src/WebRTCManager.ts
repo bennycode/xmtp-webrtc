@@ -37,7 +37,7 @@ export class WebRTCManager {
 
     pc.onicecandidate = (event) => {
       if (!event.candidate) return;
-      this.callbacks.onLog("Sending ICE candidate via XMTP");
+      this.callbacks.onLog("Sending connection info...");
       this.sendSignal({
         type: "ice-candidate",
         candidate: JSON.stringify(event.candidate.toJSON()),
@@ -146,11 +146,9 @@ export class WebRTCManager {
     const offer = await pc.createOffer();
     await pc.setLocalDescription(offer);
 
-    this.callbacks.onLog(
-      `Sending offer via XMTP to ${this.peerAddress.slice(0, 8)}...`,
-    );
+    this.callbacks.onLog("Calling...");
     await this.sendSignal({ type: "offer", sdp: offer.sdp! });
-    this.callbacks.onLog("Offer sent via E2EE XMTP channel", "ok");
+    this.callbacks.onLog("Call request sent", "ok");
   }
 
   async handleSignalingMessage(msg: SignalingMessage) {
@@ -171,7 +169,7 @@ export class WebRTCManager {
   }
 
   private async handleOffer(sdp: string) {
-    this.callbacks.onLog("Received offer via XMTP", "ok");
+    this.callbacks.onLog("Incoming call", "ok");
     this.callbacks.onConnectionStateChange("connecting");
 
     const pc = this.createPeerConnection();
@@ -187,14 +185,14 @@ export class WebRTCManager {
     const answer = await pc.createAnswer();
     await pc.setLocalDescription(answer);
 
-    this.callbacks.onLog("Sending answer via XMTP...");
+    this.callbacks.onLog("Answering call...");
     await this.sendSignal({ type: "answer", sdp: answer.sdp! });
-    this.callbacks.onLog("Answer sent via E2EE XMTP channel", "ok");
+    this.callbacks.onLog("Call answered", "ok");
   }
 
   private async handleAnswer(sdp: string) {
     if (!this.pc) return;
-    this.callbacks.onLog("Received answer via XMTP", "ok");
+    this.callbacks.onLog("Call accepted", "ok");
     await this.pc.setRemoteDescription(
       new RTCSessionDescription({ type: "answer", sdp }),
     );
