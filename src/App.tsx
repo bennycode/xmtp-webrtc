@@ -29,6 +29,7 @@ export default function App() {
   const [isMuted, setIsMuted] = useState(false);
   const [isVideoOff, setIsVideoOff] = useState(false);
   const [isScreenSharing, setIsScreenSharing] = useState(false);
+  const canScreenShare = typeof navigator.mediaDevices?.getDisplayMedia === "function";
   const [isRemoteMuted, setIsRemoteMuted] = useState(false);
 
   const requestFullscreen = useCallback((ref: React.RefObject<HTMLVideoElement | null>) => {
@@ -444,9 +445,11 @@ export default function App() {
             <button className="btn" onClick={toggleVideo}>
               {isVideoOff ? "Show Video" : "Hide Video"}
             </button>
-            <button className={`btn${isScreenSharing ? " active" : ""}`} onClick={toggleScreenShare}>
-              {isScreenSharing ? "Stop Sharing" : "Share Screen"}
-            </button>
+            {canScreenShare && (
+              <button className={`btn${isScreenSharing ? " active" : ""}`} onClick={toggleScreenShare}>
+                {isScreenSharing ? "Stop Sharing" : "Share Screen"}
+              </button>
+            )}
             {connectionState === "connected" ? (
               <button className="btn danger" onClick={hangUp}>
                 End Call
